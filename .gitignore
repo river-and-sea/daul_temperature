@@ -1,0 +1,19 @@
+# MATLAB 自动保存与临时文件
+*.asv
+*.m~
+*.autosave
+*.slxc
+*.slx.autosave
+*.mat
+check/
+fig/
+slprj/
+codegen/
+octave-workspace
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
