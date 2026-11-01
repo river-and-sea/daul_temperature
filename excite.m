@@ -36,7 +36,7 @@ function e = excite(fr, param, kz, omega)
 %   D1 = det(M8)：本函数不用（用 ~ 吃掉，ASGLU 抑制 lint）
 %   N2 = [det(M8 第5列<-b); det(M8 第6列<-b)]，2x1
 %   an = (N2/Dp).'/I_n(κ).*exp(-|Re κ|)，1x2（留数级反射系数）
-[~, ~, ~, an_o, An, an] = M8_solve(fr, param, kz, 1e-6);   %#ok<ASGLU>  s0 内置 = fw_src_amp
+[~, ~, ~, An, an_o, an] = M8_solve(fr, param, kz, 1e-6);   %#ok<ASGLU>  s0 内置 = fw_src_amp
 %   An / an 归一化后的两支系数（1x2），见 §5 用法
 % ── 2. 输出结构先占位（字段顺序固定；无效时保持空/ false）────────────────
 e = struct('ap_wall', [], 'at_wall', [], 'ap_axis', [], 'at_axis', [], 'ok', false);
@@ -49,7 +49,7 @@ knr = sqrt(kz.^2 - fr.kni_vec(:).^2).';     % 1x2 井内两支径向波数 k_nr=
 aln = fr.alphani(:).';                      % 1x2 温度/势比，转行向量与 knr 同向
 
 % ── 4. 井轴振幅 A（1x2，按支）───────────────────────────────────────────
-%   ① an                  井内两支的反射系数留数（M8_solve 第 4 输出，1x2）
+%   ① an                  井内两支的反射系数留数（M8_solve 第 6 输出，1x2）
 %   ② .* (knr*a0/2)^n/n!  张碧星式 (5) 的多极源因子（n=0 时为 1）
 %   ③ .* exp( 1i*kz*z)     沿 z 传播相位 e^{i kz z}
 

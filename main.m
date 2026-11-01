@@ -12,15 +12,10 @@ param_sym();
 % ---------------- 参数 ----------------
 freqs   = logspace(3, 6, 16);  % 频率轴 [Hz]（快速验证用 16 点；正式跑改 128）
 nFreq   = numel(freqs);
-pc      = 0;                   % 围压 [Pa]
-pf      = 0;                   % 孔压 [Pa]
-theta0  = 0;                   % 温度变化 [K]
-R       = 0.1;                 % 井半径 [m]
-n       = 0;                   % 方位序数（Bessel 阶）
 f0_seed = 1e4;                 % 播种频率：从这里向两端延拓
 v1      = 1000;                % 粗扫相速度下限 [m/s]（上限由 fr.ks_val 给）
 
-param = param_0(pc, pf, theta0, R, n);
+param = param_0();             % pc/pf/theta0/R/n 用 param_0 里的默认值
 
 [~, i0] = min(abs(freqs - f0_seed));
 order   = [i0:-1:1, i0:nFreq];   % 双向延拓
@@ -85,7 +80,7 @@ semilogx(freqs, Vp.', 'LineWidth', 1); hold on;
 semilogx(freqs, Vs, 'k--', 'LineWidth', 1.2);
 grid on; xlabel('f [Hz]'); ylabel('phase velocity [m/s]');
 legend({'P_1','P_2','P_3','P_4','S'}, 'Location', 'best');
-title(sprintf('body-wave phase velocity  (pc = %.3g MPa, dT = %.3g K)', pc/1e6, theta0));
+title('body-wave phase velocity');
 
 subplot(5,1,2);
 semilogx(freqs, Atten.', 'LineWidth', 1);
@@ -95,7 +90,7 @@ title('attenuation');
 subplot(5,1,3);
 semilogx(freqs, Vph, 'LineWidth', 1.2);
 grid on; xlabel('f [Hz]'); ylabel('kz phase velocity [m/s]');
-title(sprintf('borehole mode (n = %d)', n));
+title(sprintf('borehole mode (n = %d)', param.n));
 
 subplot(5,1,4);
 semilogx(freqs, abs(ap_w), 'LineWidth', 1.2); hold on;

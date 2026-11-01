@@ -1,5 +1,5 @@
-function F = source_spec(fvec, fc, tc)
-% source_spec —— 源频谱 F(ω)，逐字照刘建宇 pf3.m + Sa.m
+function F = source_spec_fw(fvec, fc, tc)
+% source_spec_fw —— 源频谱 F(ω)，逐字照刘建宇 pf3.m + Sa.m
 %
 %   F(ω) = (tc/4)·[ Sa(cpt+p0t) + Sa(cpt-p0t)
 %                   + 0.5·( Sa(cpt+a) + Sa(cpt-a) + Sa(cpt+b) + Sa(cpt-b) ) ]·exp(i·cpt)

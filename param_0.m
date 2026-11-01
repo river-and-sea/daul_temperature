@@ -1,8 +1,17 @@
 function param = param_0(pc, pf, theta0, R, n)
 % param_0 —— 不随频率变化的全部参数（材质 + 派生量 + 随 pc 变的静态量 + 几何）
-%   pc, pf, theta0  围压 [Pa] / 孔压 [Pa] / 温度变化 [K]
-%   R               井半径 [m]
-%   n               方位序数（Bessel 阶）
+%
+% 五个算例量都可以省略，省略时用下面这组默认值（main 里直接 param_0() 即可）：
+%   pc      围压 [Pa]        默认 0
+%   pf      孔压 [Pa]        默认 0
+%   theta0  温度变化 [K]     默认 0
+%   R       井半径 [m]       默认 0.1
+%   n       方位序数（Bessel 阶） 默认 0
+if nargin < 1 || isempty(pc),     pc     = 65e6;    end
+if nargin < 2 || isempty(pf),     pf     = 0;    end
+if nargin < 3 || isempty(theta0), theta0 = 0;    end
+if nargin < 4 || isempty(R),      R      = 0.1;  end
+if nargin < 5 || isempty(n),      n      = 0;    end
 
 %% §4 材质与热学预设（换算例只改这一段）
 %% §4.0 缩放因子（材质公式的依赖，故放在本节最前）
@@ -160,5 +169,5 @@ param = struct( ...
     'k0',k0, 'morsE',morsE, 'visc',visc, ...
     'k_f_in',k_f_in, 'Knf',Knf, 'Omega_2f_in',Omega_2f_in, ...
     'den_f_in',den_f_in, 'F_p22_in',F_p22_in, 'time0_f_in',time0_f_in, ...
-    'R',R, 'n',n, 'a0',a0);
+    'R',R, 'n',n, 'a0',a0, 'pc',pc);
 end
