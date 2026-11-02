@@ -1,158 +1,197 @@
-% axis_fw —— 井轴上的"广义声压"和温度全波列（张碧星等 1995，式 (9)）
+% axis_fw —— 井轴 / 井壁全波（合并 axis_fw 与 fullwave_fw）
 %
-% 脚本程序：直接运行本文件即可。
-%   逐 (ω, kz) 求出式 (9) 第二项的被积函数，再做两次 FFT 得到
-%   时域总场 = 直达项 + 反射项，最后画 P（声压）和 H（温度）的波形。
+% 脚本程序：直接运行本文件即可。单道（z），共用同一次 M8_solve。
 %
-%   井内两支：M8_solve 给出 An（解级、按 I_n 归一）。
-%   声压通道取 sum(An)，温度通道取 sum(An .* alphani)（照 excite 的口径）。
+%   井轴（A，轴压 / 张碧星式 (9)，对应旧 zbx_axis_pressure）：
+%       p = chengzi * sum( knr^(2n) * An )        An 已按 I_n 归一
+%       直达项用 k_in 的解析式直接在 z 上求值
+%
+%   井壁（B，全波，对应旧 zbx_fullwave）：
+%       p = rho_f*om^2 * (src + x(5:6))           src 带 (knr^2*r0/4)^n*e^{-κ}
+%
+%   ── 命名规范 ──────────────────────────────────────────────────────────
+%   核（ω,kz 域）：{p,h}{A,B}_{r,d}        小写 p/h，A=井轴 B=井壁，r=反射 d=直达
+%   变换后      ：{P,H}{A,B}_{r,d}_z        kz->z
+%   时域        ：{P,H}{A,B}_{r,d}_t        ω->t
+%   输出 out    ：{P,H}_{axis,wall}[_r,_d]  总场与分量
+%   两套口径都输出声压与温度；总场 = 反射 + 直达。
 
 %% ============ 0. 参数 ============
-param  = param_0();                          % 五参数用默认：pc=0, pf=0, theta0=0, R=0.1, n=0
+param  = param_0();                          % 五参数用默认
 n      = param.n;
-n_rec  = 3;                                  % 接收道数
+z  = 3;                                  % 唯一的接收位置 [m]
 
 % ---- 网格常量（原 dt_config.fw_*）----
-fw_tc        = 0.5e-3;             % 源脉冲特征时间 [s]
+tc        = 0.5e-3;             % 源脉冲特征时间 [s]
 fw_fc_list   = [6000 5000 6000];   % 各 n 的源中心频率 [Hz]
 fw_n_list    = [0 1 2];            % 允许的 n
-fw_dt        = 10e-6;              % 时间步 [s]
-fw_n2        = 2049;               % 频域点数
-fw_n1        = 4097;               % k 域点数
-fw_dz        = 0.5;                % 接收器间距 [m]
-fw_ddz0      = 0.0208;             % 粗空间步 [m]
-fw_zp        = 2;                  % 第一道源距 [m]
-fw_f0i_ratio = 1/100;              % 复频偏移比例
+dt        = 10e-6;              % 时间步 [s]
+N_t        = 2049;               % 频域点数
+N_kz        = 4097;               % k 域点数
+f0_ratio = 1/100;              % 复频偏移比例
+d_z         = 1/48;                              % 空间步 [m]（任取，只要 z 落在网格点）
 
 % ============ 栅格 ============
-% 两次 FFT 各需要一套栅格：
-%   z ←→ k_z（空间-波数），t ←→ f（时间-频率）
-
 % ---- 源 ----
-f_src = fw_fc_list(fw_n_list == n);        % 源中心频率 [Hz]（n=0/1/2 → 6000/5000/6000）
-tc    = fw_tc;                             % 源脉冲特征时间 [s]
+f_src = fw_fc_list(fw_n_list == n);        % 源中心频率 [Hz]
 
-% ---- 空间栅格 z ----
-dt     = fw_dt;                            % 时间步 [s]
-n1     = fw_n1;                            % z 域点数（4097）
-n2     = fw_n2;                            % t 域点数（2049）
-n_step = fix(fw_dz/fw_ddz0);               % 道间距被细分的步数：0.5/0.0208 → 24
-d_z    = fw_dz/n_step;                     % 空间步 [m] ≈ 0.0208
-m0     = round(fw_zp/d_z);                 % 第一道（z = 2 m）对应的点号
-m_rec  = 1 + m0 + (0:(n_rec-1))*n_step;    % n_rec 个接收道的点号
-z_rec  = m_rec*d_z;                        % 接收道位置 [m]
 
-% ---- 波数栅格 k_z（只取正半轴，另一半由共轭镜像补）----
-n_k    = fix(n1/2) + 1;                    % 正半轴点数 = 2049
-dk     = 2*pi/(d_z*(n1-1));                % 波数步 [1/m]（与 d_z 的 DFT 对偶）
-k_z    = ((1:n_k)-1)*dk + 1e-36;           % +1e-36 只是避开 k = 0
+% ---- 空间轴 / 波数轴（唯一约束：dk*d_z*(n1-1) = 2π）----
+i_z = round(z/d_z);                      % z 落在第几个网格点
+z     = i_z*d_z;                         % 对齐后的接收位置 [m]
 
-% ---- 时间栅格 t（只取前一半，后一半是 FFT 周期延拓）----
-n_t    = fix(0.5*(fix(n2/2)+1));           % 输出时间点数 = 512
-i_t    = 1:n_t;                            % 输出时间点下标
+N_k = fix(N_kz/2) + 1;                       % 波数正半轴点数
+d_k  = 2*pi/(d_z*(N_kz-1));                   % 波数步 [1/m]，由 d_z 的对偶关系定出
+kz = linspace(0, (N_k-1)*d_k, N_k) + 1e-36;
 
-% ---- 频率栅格 f（只算源谱带宽内的频点，不是全部 2049 个）----
-dfp    = 1/(dt*(n2-1));                    % 频率步 [Hz] ≈ 48.8
-iw_f   = (round((f_src-2/tc)/dfp)+1) : round((f_src+2/tc)/dfp);   % f_src ± 2/tc 内的主 FFT 下标
-n_w    = numel(iw_f);                      % 频点数 ≈ 164
-freq   = iw_f*dfp;                         % 实频率 [Hz]
-% 复频偏移：把积分路径从实轴抬到 w + i*sigma（sigma = 2*pi*f_src*ratio ≈ 377 rad/s）。
-%   由 P(t) = e^{sigma*t} * Int[ P(w+i*sigma) e^{-i w t} ] 可知：
-%   用复频算出的 FFT 结果是 e^{-sigma*t} P(t)，故时域要乘回 e^{+sigma*t}（见下方 decay）。
-%   作用：① 压制 FFT 的周期回卷（窗尾被压掉几个量级）；② 复频上根/Bessel 更稳。
-%   偏移本身不改变最终结果，只是数值手段。
-freq_c = freq + 1i*f_src*fw_f0i_ratio;
-om_c   = 2*pi*freq_c;                      % 复角频率 [rad/s]
-F      = source_spec_fw(freq_c, f_src, tc);% 源谱 F(ω)
+% ---- 时间轴 ----
+N_tt = fix(0.5*(fix(N_t/2)+1));             % 输出时间点数（N_t 是频域点数，别覆盖）
+i_t  = 1:N_tt;
+time    = linspace(0, (N_tt-1)*dt, N_tt);
 
-%% ============ 1. 逐 (ω, kz) 求式 (9) 的被积函数 + 直达项 ============
-p_r  = zeros(n_w, n_k);                    % 声压：反射项核
-h_r  = zeros(n_w, n_k);                    % 温度：反射项核
-P_d  = zeros(n_w, n_rec);                  % 声压：直达项
-H_d  = zeros(n_w, n_rec);                  % 温度：直达项
-r0   = param.a0;
-angf = 1;                                  % cos(n(θ-θ0))，θ=θ0 时 = 1
-chengzi = angf * (1 + (n > 0)) * (r0/4)^n / (4*pi*factorial(n));   % eps_n = 2 - δ_{n0}
+% ---- 频率轴 ----
+df  = 1/(dt*(N_t-1));
+iw_f = (round((f_src-2/tc)/df)+1) : round((f_src+2/tc)/df);
+N_w  = numel(iw_f);
+freq = iw_f*df;
 
-for iw = 1:n_w
-    fr   = ki_omega(om_c(iw), param, []);  % 复频下的解
-    k_in = fr.kni_vec(:);                  % 2x1 井内两支轴向波数（列向量，直达项要做外层积）
-    aln  = fr.alphani(:);                  % 2x1 两支的温度/势比
+% 复频偏移：路径抬到 w + i*sigma；时域乘回 e^{+sigma*t}
+freq_c = freq + 1i*f_src*f0_ratio;
+om_c   = 2*pi*freq_c;
+F      = source_spec_fw(freq_c, f_src, tc);
 
-    % ---- 直达项（式 (9) 第一项）----
-    Dp_ = zeros(1, n_rec);                 % 声压：两支直接求和
-    Dh_ = zeros(1, n_rec);                 % 温度：两支乘 alphani 后求和
-    for m = 0:n
-        term = exp(1i*(k_in*z_rec)) .* ((-2i*k_in).^m) ./ (z_rec.^(2*n-m+1));
-        coef = nchoosek(n,m)*factorial(2*n-m);
-        Dp_ = Dp_ + coef .* sum(term, 1);
-        Dh_ = Dh_ + coef .* sum(term .* aln, 1);
+%% ============ 1. 逐 (ω, kz)：两套口径一起算 ============
+pA_r = zeros(N_w, N_k);   pA_d = zeros(N_w, 1);   % 井轴：声压 反射核 / 直达（z 域）
+hA_r = zeros(N_w, N_k);   hA_d = zeros(N_w, 1);   % 井轴：温度
+pW_r = zeros(N_w, N_k);   pW_d = zeros(N_w, N_k); % 井壁：声压 反射核 / 直达核
+hB_r = zeros(N_w, N_k);   hB_d = zeros(N_w, N_k); % 井壁：温度
+
+r0   = param.r0;
+angf = 1;                                  % cos(n*theta_rec)，theta_rec = 0
+chengzi = param.s0*(1 + (n > 0)) * (r0/4)^n / (2*factorial(n));   % 井轴口径前因子
+
+for iw = 1:N_w
+    fr    = ki_omega(om_c(iw), param, []); % 复频下的解
+    om    = om_c(iw);
+    k_in  = fr.kni_vec(:).';               % 1x2 井内两支轴向波数（行）
+    aln   = fr.alphani(:);                 % 2x1 温度/势比
+
+    % ---- 井轴直达项（式 (9) 第一项，z 域解析式）----
+    p_acc = 0;
+    h_acc = 0;
+    for mm = 0:n
+        term = exp(1i*(k_in*z)) .* ((-2i*k_in).^mm) ./ (z.^(2*n-mm+1));
+        coef = nchoosek(n,mm)*factorial(2*n-mm);
+        p_acc = p_acc + coef .* sum(term);
+        h_acc = h_acc + coef .* sum(term .* aln.');
     end
-    P_d(iw,:) = chengzi .* Dp_;
-    H_d(iw,:) = chengzi .* Dh_;
+    pA_d(iw) = chengzi .* p_acc;
+    hA_d(iw) = chengzi .* h_acc;
 
-    % ---- 反射项的被积函数 ----
-    for ik = 1:n_k
-        kz  = k_z(ik);
-        knr = sqrt(kz.^2 - k_in.^2);       % 2x1 井内两支径向波数
+    for ik = 1:N_k
+        %   An_o = x(5:6).'（未归一），  An = An_o / I_n（已归一）
+        %   src  = 源列本身（已含 (knr*r0/2)^n/n! 与 eps_n，第 2 支置 0）
+        [~, src_wall, An_wall, An_axis] = M8_solve(fr, param, kz(ik));
 
-        [~, ~, ~, An] = M8_solve(fr, param, kz);   % 第 4 输出：解级、已按 I_n 归一（不算 Dp）
-        An = An.';                                  % 1x2 -> 2x1
+        % ---- 井轴（A）：权重 × 归一系数 ----
+        %   权重 wA = chengzi * knr^(2n)（不含 rho_f*om^2，声压/温度共用）
+        pA_r(iw,ik) = angf *sum(An_axis);                      % 反射
+        hA_r(iw,ik) = angf *sum(An_axis .* aln.');
 
-        w2n = knr.^(2*n);                  % 多极源的 n 阶径向因子
-        p_r(iw,ik) = chengzi * sum(w2n .* An);
-        h_r(iw,ik) = chengzi * sum(w2n .* An .* aln);
+        % ---- 井壁（B）：权重 × (源 + 反射) ----
+        %   井壁场 = 直达 src + 反射 x(5:6)，两者同尺度，直接相加
+        pW_d(iw,ik) = angf * sum(src_wall);
+        pW_r(iw,ik) = angf * sum(An_wall);
+        hB_d(iw,ik) = angf * sum(src_wall .* aln.');
+        hB_r(iw,ik) = angf * sum(An_wall .* aln.');
     end
 end
 
-%% ============ 2. 双重 FFT -> 时域 ============
-% 反射项：kz -> z（integrate_kz 补负半轴镜像、取接收道），再乘源谱
-P_r_z = integrate_kz(p_r, n1, n_k, m_rec) .* F(:);
-H_r_z = integrate_kz(h_r, n1, n_k, m_rec) .* F(:);
+%% ============ 2. 双重 FFT -> 时域（单道）============
+% kz -> z
+PA_r_z = integrate_kz(pA_r, N_kz, N_k, i_z, d_z) .* F(:);
+HA_r_z = integrate_kz(hA_r, N_kz, N_k, i_z, d_z) .* F(:);
+PA_d_z = pA_d .* F(:);                % 井轴直达项本来就在 z 域
+HA_d_z = hA_d .* F(:);
 
-% 直达项：本来就在 z 域，乘源谱及除采样时间间隔
-P_d_z = P_d .* F(:) / dt;
-H_d_z = H_d .* F(:) / dt;
+PW_r_z = integrate_kz(pW_r, N_kz, N_k, i_z, d_z) .* F(:);
+PW_d_z = integrate_kz(pW_d, N_kz, N_k, i_z, d_z) .* F(:);
+HB_r_z = integrate_kz(hB_r, N_kz, N_k, i_z, d_z) .* F(:);
+HB_d_z = integrate_kz(hB_d, N_kz, N_k, i_z, d_z) .* F(:);
 
-% ω -> t（integrate_omega 补负频共轭镜像）
-Tp = integrate_omega(P_r_z, n2, iw_f);
-Td = integrate_omega(P_d_z, n2, iw_f);
-Th = integrate_omega(H_r_z, n2, iw_f);
-Tg = integrate_omega(H_d_z, n2, iw_f);
+% ω -> t
+PA_r_t = integrate_omega(PA_r_z, N_t, iw_f, dt);
+PA_d_t = integrate_omega(PA_d_z, N_t, iw_f, dt);
+HA_r_t = integrate_omega(HA_r_z, N_t, iw_f, dt);
+HA_d_t = integrate_omega(HA_d_z, N_t, iw_f, dt);
 
-% 乘回 e^{+sigma*t}：复频逆变换自带 e^{-sigma*t}（见 freq_c 处），这一步精确还原真实信号
-decay = exp(2*pi*f_src*fw_f0i_ratio*i_t*dt).';
+PW_r_t = integrate_omega(PW_r_z, N_t, iw_f, dt);
+PW_d_t = integrate_omega(PW_d_z, N_t, iw_f, dt);
+HB_r_t = integrate_omega(HB_r_z, N_t, iw_f, dt);
+HB_d_t = integrate_omega(HB_d_z, N_t, iw_f, dt);
 
-P_r_t = real(Tp(i_t,:) .* decay);
-P_d_t = real(Td(i_t,:) .* decay);
-H_r_t = real(Th(i_t,:) .* decay);
-H_d_t = real(Tg(i_t,:) .* decay);
+decay = exp(2*pi*f_src*f0_ratio*i_t*dt).';   % 复频偏移的时域还原
 
-P = (P_r_t + P_d_t).';                     % n_rec x n_t 声压
-H = (H_r_t + H_d_t).';                     % n_rec x n_t 温度
+% 取输出时段
+PA_r_t = real(PA_r_t(i_t) .* decay);   PA_d_t = real(PA_d_t(i_t) .* decay);
+HA_r_t = real(HA_r_t(i_t) .* decay);   HA_d_t = real(HA_d_t(i_t) .* decay);
+PW_r_t = real(PW_r_t(i_t) .* decay);   PW_d_t = real(PW_d_t(i_t) .* decay);
+HB_r_t = real(HB_r_t(i_t) .* decay);   HB_d_t = real(HB_d_t(i_t) .* decay);
 
-fprintf('n=%d pc=%g MPa  z=%.4f..%.4f m\n', n, (param.pc)/1e6, z_rec(1), z_rec(end));
-fprintf('  P: max|P_r|=%.4g  max|P_d|=%.4g  max|P|=%.4g\n', ...
-    max(abs(P_r_t(:))), max(abs(P_d_t(:))), max(abs(P(:))));
-fprintf('  H: max|H_r|=%.4g  max|H_d|=%.4g  max|H|=%.4g\n', ...
-    max(abs(H_r_t(:))), max(abs(H_d_t(:))), max(abs(H(:))));
+% 总 = 反射 + 直达
+P_axis = PA_r_t + PA_d_t;   H_axis = HA_r_t + HA_d_t;
+P_wall = PW_r_t + PW_d_t;   H_wall = HB_r_t + HB_d_t;
 
-%% ============ 3. 画 P、H 的波形 ============
-t_plot = i_t*dt*1000 - dt*1000;            % [ms]
-fig = figure('Visible', 'off', 'Position', [100 100 900 800]);
+out = struct( ...
+    't',        time,       ...             % 时间轴 [s]
+    'z',        z,     ...             % 接收位置 [m]
+    'P_axis',   P_axis,    ...             % 井轴声压总场
+    'P_axis_r', PA_r_t,    ...             % 井轴声压反射
+    'P_axis_d', PA_d_t,    ...             % 井轴声压直达
+    'H_axis',   H_axis,    ...             % 井轴温度总场
+    'H_axis_r', HA_r_t,    ...
+    'H_axis_d', HA_d_t,    ...
+    'P_wall',   P_wall,    ...             % 井壁声压总场
+    'P_wall_r', PW_r_t,    ...             % 井壁声压反射
+    'P_wall_d', PW_d_t,    ...             % 井壁声压直达
+    'H_wall',   H_wall,    ...             % 井壁温度总场
+    'H_wall_r', HB_r_t,    ...
+    'H_wall_d', HB_d_t,    ...
+    'pA_r',     pA_r,      ...             % 井轴声压 (ω,kz) 核
+    'pW_r',     pW_r,      ...             % 井壁声压 (ω,kz) 核
+    'n',        n,         ...
+    'pc',       param.pc,  ...
+    'fc',       f_src,     ...
+    'freq',     freq,      ...
+    'kz',       kz);
 
-subplot(2,1,1);
-plot(t_plot, P.', 'LineWidth', 1);
-grid on; xlabel('t [ms]'); ylabel('P');
-leg = arrayfun(@(z) sprintf('z = %.3f m', z), z_rec, 'UniformOutput', false);
-legend(leg, 'Location', 'best');
-title(sprintf('axis pressure  (n = %d, pc = %g MPa)', n, param.pc/1e6));
+fprintf('n=%d pc=%g MPa  z=%.4f m\n', n, param.pc/1e6, z);
+fprintf('  井轴: max|P_r|=%.4g  max|P_d|=%.4g  max|P|=%.4g\n', ...
+    max(abs(out.P_axis_r)), max(abs(out.P_axis_d)), max(abs(out.P_axis)));
+fprintf('  井壁: max|P_r|=%.4g  max|P_d|=%.4g  max|P|=%.4g\n', ...
+    max(abs(out.P_wall_r)), max(abs(out.P_wall_d)), max(abs(out.P_wall)));
+fprintf('  温度: 井轴 max=%.4g  井壁 max=%.4g\n', max(abs(out.H_axis)), max(abs(out.H_wall)));
 
-subplot(2,1,2);
-plot(t_plot, H.', 'LineWidth', 1);
-grid on; xlabel('t [ms]'); ylabel('H');
-legend(leg, 'Location', 'best');
-title('axis temperature');
+%% ============ 3. 画 12 张图：温压 × 轴壁 × (总/直/反) ============
+t_plot = out.t;                            % [s]
+fig = figure('Visible', 'off', 'Position', [100 100 1400 1100]);
+
+ycol = {'total', 'direct', 'reflected'};
+labs = {'P_{axis}', 'P_{wall}', 'H_{axis}', 'H_{wall}'};
+dat  = { {out.P_axis, out.P_axis_d, out.P_axis_r}, ...
+         {out.P_wall, out.P_wall_d, out.P_wall_r}, ...
+         {out.H_axis, out.H_axis_d, out.H_axis_r}, ...
+         {out.H_wall, out.H_wall_d, out.H_wall_r} };
+
+for i = 1:4
+    for j = 1:3
+        subplot(4, 3, (i-1)*3 + j);
+        plot(t_plot, dat{i}{j}, 'LineWidth', 1);
+        grid on; xlabel('t [s]'); ylabel(labs{i});
+        title(sprintf('%s  %s', labs{i}, ycol{j}));
+    end
+end
+sgtitle(sprintf('n=%d, z=%.3f m, pc=%g MPa', n, z, param.pc/1e6));
 
 outdir = fullfile(fileparts(mfilename('fullpath')), 'fig');
 if exist(outdir, 'dir') ~= 7, mkdir(outdir); end
@@ -160,22 +199,82 @@ saveas(fig, fullfile(outdir, 'fig_axis_fw.png'));
 close(fig);
 fprintf('saved: %s\n', fullfile(outdir, 'fig_axis_fw.png'));
 
+%% ============ 4. t-z 时空图（全波 = 直达 + 反射）============
+z_all = (0:N_kz-2)*d_z;                          % fft 后的全 z 轴 [m]
+iz    = find(z_all >= 0.5 & z_all <= 6);       % 观察窗
+z_win = z_all(iz);
+zw    = z_win(:).';                            % 1×nz
+
+% ---- 井轴直达项：在 z 窗上解析求值（式 (9) 第一项）----
+PAd_tz = zeros(N_w, numel(zw));
+HAd_tz = zeros(N_w, numel(zw));
+for iw = 1:N_w
+    fr   = ki_omega(om_c(iw), param, []);
+    k_in = fr.kni_vec(:).';                    % 1×2
+    aln  = fr.alphani(:);                      % 2×1
+    p_acc = zeros(1, numel(zw));
+    h_acc = zeros(1, numel(zw));
+    for mm = 0:n
+        term = exp(1i*(k_in.'*zw)) .* ((-2i*k_in.').^mm) ./ (zw.^(2*n-mm+1));   % 2×nz
+        coef = nchoosek(n,mm)*factorial(2*n-mm);
+        p_acc = p_acc + coef .* sum(term, 1);
+        h_acc = h_acc + coef .* sum(term .* aln, 1);
+    end
+    PAd_tz(iw,:) = chengzi .* p_acc;
+    HAd_tz(iw,:) = chengzi .* h_acc;
+end
+
+% ---- 四通道反射项：kz -> z（取窗口列）-> 乘源谱 ----
+PAr_tz = integrate_kz(pA_r, N_kz, N_k, iz, d_z) .* F(:);
+PWr_tz = integrate_kz(pW_r, N_kz, N_k, iz, d_z) .* F(:);
+HAr_tz = integrate_kz(hA_r, N_kz, N_k, iz, d_z) .* F(:);
+HBr_tz = integrate_kz(hB_r, N_kz, N_k, iz, d_z) .* F(:);
+
+% 井壁直达项：kz 域核 pW_d/hB_d 也走 kz -> z
+PWd_tz = integrate_kz(pW_d, N_kz, N_k, iz, d_z) .* F(:);
+HBd_tz = integrate_kz(hB_d, N_kz, N_k, iz, d_z) .* F(:);
+
+% 井轴直达项：z 域直接乘源谱
+PAd_tz = PAd_tz .* F(:);
+HAd_tz = HAd_tz .* F(:);
+
+% ---- ω -> t ----
+tmp = integrate_omega(PAr_tz + PAd_tz, N_t, iw_f, dt);   PAw = real(tmp(i_t,:) .* decay);
+tmp = integrate_omega(PWr_tz + PWd_tz, N_t, iw_f, dt);   PWw = real(tmp(i_t,:) .* decay);
+tmp = integrate_omega(HAr_tz + HAd_tz, N_t, iw_f, dt);   HAw = real(tmp(i_t,:) .* decay);
+tmp = integrate_omega(HBr_tz + HBd_tz, N_t, iw_f, dt);   HBw = real(tmp(i_t,:) .* decay);
+
+fig2 = figure('Visible', 'off', 'Position', [100 100 1100 800]);
+tzs = {abs(PAw), abs(PWw), abs(HAw), abs(HBw)};
+ttl = {'|P_{axis}(t,z)|', '|P_{wall}(t,z)|', '|H_{axis}(t,z)|', '|H_{wall}(t,z)|'};
+for k = 1:4
+    subplot(2,2,k);
+    imagesc(t_plot, z_win, tzs{k}.');
+    axis xy; colorbar;
+    xlabel('t [s]'); ylabel('z [m]');
+    title(ttl{k});
+end
+saveas(fig2, fullfile(outdir, 'fig_axis_fw_tz.png'));
+close(fig2);
+fprintf('saved: %s\n', fullfile(outdir, 'fig_axis_fw_tz.png'));
+
+
 % ======================================================================
-function Zz = integrate_kz(Z, n1, n_k, m_rec)
-% kz -> z：补负半轴镜像后做 FFT，再取 n_rec 个接收道
+function Zz = integrate_kz(Z, n1, n_k, i_z, d_z)
+% kz -> z：补负半轴镜像后做 FFT，只取 m_rec 这一点
 Zk = zeros(size(Z,1), n1, 'like', Z);
 Zk(:, 1:n_k)          = Z;
 Zk(:, n1+1-(2:n_k))   = Z(:, 2:n_k);          % 负半轴：复制式镜像
 rec_z = fft(Zk(:, 1:n1-1).').';               % kz -> z
-Zz = rec_z(:, m_rec);
+Zz = rec_z(:, i_z) * (1/(d_z*(n1-1)));      % 单道 + dk/(2π) 归一化
 end
 
 
 % ======================================================================
-function Zt = integrate_omega(Z, n2, iw_f)
+function Zt = integrate_omega(Z, n2, iw_f, dt)
 % ω -> t：补负频共轭镜像后做 FFT
 Xf = zeros(n2-1, size(Z,2), 'like', Z);
 Xf(iw_f, :)         = Z;                      % 正频段
 Xf(n2-iw_f+1, :)    = conj(Z);                % 负频共轭镜像
-Zt = fft(Xf, [], 1);
+Zt = fft(Xf, [], 1) * (1/(dt*(n2-1)));        % dω/(2π) 归一化
 end

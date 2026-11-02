@@ -8,16 +8,20 @@ function param = param_0(pc, pf, theta0, R, n)
 %   R       井半径 [m]       默认 0.1
 %   n       方位序数（Bessel 阶） 默认 0
 if nargin < 1 || isempty(pc),     pc     = 65e6;    end
-if nargin < 2 || isempty(pf),     pf     = 0;    end
+if nargin < 2 || isempty(pf),     pf     = 5e6;    end
 if nargin < 3 || isempty(theta0), theta0 = 0;    end
 if nargin < 4 || isempty(R),      R      = 0.1;  end
 if nargin < 5 || isempty(n),      n      = 0;    end
+
+% —— 源径（张碧星多极源分布半径；只进多极因子，不影响色散）——
+r0 = 0.01;                   % 源分布半径 [m]
+s0 = 1e-3;                   % 源强标定（原 fw_src_amp）
+r  = R;                      % 接收器径向位置 [m]（当前 = 井壁；可改 0.5*R 等）
 
 %% §4 材质与热学预设（换算例只改这一段）
 %% §4.0 缩放因子（材质公式的依赖，故放在本节最前）
 scale   = 1;      % 热学分组缩放总倍率：1 = 物理值；1e-1 = 旧口径（热效应整体弱约 10×）
                   %   下游 sc_k / sc_C / sc_t / sc_K / sc_alp 全部取它 —— 改一处即整体缩放热学
-chengzi = 1;    % 孔隙度乘子：poros = 0.197*chengzi（要扫孔隙度只改这里，不动物性表）
 
 %% §4.1 孔隙弹性材质 —— 默认「赵志强」
 % —— 渗流（下游进 Biot 耗散项；本文件不直接算它）——
@@ -26,7 +30,7 @@ morsE = 2.8481;     % 渗透率动态修正参数（无量纲，沿用原程序�
 visc  = 0.00106;    % 流体黏度 [Pa·s]
 % —— 密度与孔隙度 ——
 den_s = 2581.57;    % 固体颗粒密度 [kg/m³]
-poros = 0.197*chengzi;   % 孔隙度 [-]（基准 0.197 × chengzi）
+poros = 0.197;   % 孔隙度 [-]（基准 0.197 × chengzi）
 den_f = 1000;       % 流体密度 [kg/m³]
 % —— 模量（§6 的 Alpha / M / lambda_c 全从这里推）——
 Kf   = 2.25e9;      % 流体体积模量 [Pa]
@@ -153,8 +157,6 @@ Upsilon_p = Upsilon - (Omega_2f*theta_f_s + Omega_2s*theta_s_s);
 Omega_11 = Omega_1s*(1 + e33);  Omega_12 = Omega_1f*(1 + e33);
 Omega_21 = Omega_2s*(1 + w33);  Omega_22 = Omega_2f*(1 + w33);
 
-% —— 源径（张碧星多极源分布半径；只进多极因子，不影响色散）——
-a0 = 0.01;                   % [m]
 
 % —— 打包（字段顺序 = §8 并入 param 的顺序，勿随意调整）——
 param = struct( ...
@@ -169,5 +171,5 @@ param = struct( ...
     'k0',k0, 'morsE',morsE, 'visc',visc, ...
     'k_f_in',k_f_in, 'Knf',Knf, 'Omega_2f_in',Omega_2f_in, ...
     'den_f_in',den_f_in, 'F_p22_in',F_p22_in, 'time0_f_in',time0_f_in, ...
-    'R',R, 'n',n, 'a0',a0, 'pc',pc);
+    'R',R, 'n',n, 'r0',r0, 's0',s0, 'r',r, 'pc',pc);
 end
