@@ -1,22 +1,26 @@
-function param = param_0(pc, pf, theta0, R, n)
+function param = param_0(pc, pf, dT, n, r)
 % param_0 —— 不随频率变化的全部参数（材质 + 派生量 + 随 pc 变的静态量 + 几何）
 %
 % 五个算例量都可以省略，省略时用下面这组默认值（main 里直接 param_0() 即可）：
-%   pc      围压 [Pa]        默认 0
-%   pf      孔压 [Pa]        默认 0
-%   theta0  温度变化 [K]     默认 0
-%   R       井半径 [m]       默认 0.1
+%   pc      围压 [Pa]        默认 65e6
+%   pf      孔压 [Pa]        默认 5e6
+%   dT      温度变化 [K]     默认 0
 %   n       方位序数（Bessel 阶） 默认 0
+%   r       接收器径向位置 [m]    默认 = R（井壁）；R 固定 0.1 m，不作输入
 if nargin < 1 || isempty(pc),     pc     = 65e6;    end
 if nargin < 2 || isempty(pf),     pf     = 5e6;    end
-if nargin < 3 || isempty(theta0), theta0 = 0;    end
-if nargin < 4 || isempty(R),      R      = 0.1;  end
-if nargin < 5 || isempty(n),      n      = 0;    end
+if nargin < 3 || isempty(dT),     dT     = 0;    end
+if nargin < 4 || isempty(n),      n      = 0;    end
+R = 0.1;                                        % 井半径 [m]（固定，仅内部用）
+if nargin < 5 || isempty(r),      r      = R;   end
 
 % —— 源径（张碧星多极源分布半径；只进多极因子，不影响色散）——
 r0 = 0.01;                   % 源分布半径 [m]
 s0 = 1e-3;                   % 源强标定（原 fw_src_amp）
-r  = R;                      % 接收器径向位置 [m]（当前 = 井壁；可改 0.5*R 等）
+
+% —— 方位角（角向因子 cos(n*(th_rec-th_src))）——
+th_rec = 0;                  % 接收方位角 [rad]
+th_src = 0;                  % 源方位角 [rad]
 
 %% §4 材质与热学预设（换算例只改这一段）
 %% §4.0 缩放因子（材质公式的依赖，故放在本节最前）
@@ -110,7 +114,7 @@ Omega_2s = poros*M*(1-poros)/(1-Alpha)*(Alpha/poros-1)*alpha_s;      % 固相温
 Omega_2f = poros*M*alpha_f;                                          % 流相温度 → 孔压
 
 % —— 温度变化与热惯性（除以 T0，直接进 8×8 矩阵）——
-theta_s_s = theta0;  theta_f_s = theta0;   % 固/流两相取同一温度变化 ΔT
+theta_s_s = dT;  theta_f_s = dT;   % 固/流两相取同一温度变化 ΔT
 F_p11 = F11/T0;  F_p12 = F12/T0;  F_p21 = F21/T0;  F_p22 = F22/T0;
 
 % —— 相热导率 ——
@@ -171,5 +175,5 @@ param = struct( ...
     'k0',k0, 'morsE',morsE, 'visc',visc, ...
     'k_f_in',k_f_in, 'Knf',Knf, 'Omega_2f_in',Omega_2f_in, ...
     'den_f_in',den_f_in, 'F_p22_in',F_p22_in, 'time0_f_in',time0_f_in, ...
-    'R',R, 'n',n, 'r0',r0, 's0',s0, 'r',r, 'pc',pc);
+    'R',R, 'n',n, 'r0',r0, 's0',s0, 'r',r, 'dT',dT, 'th_rec',th_rec, 'th_src',th_src, 'pc',pc);
 end

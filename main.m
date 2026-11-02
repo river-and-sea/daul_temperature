@@ -15,7 +15,7 @@ nFreq   = numel(freqs);
 f0_seed = 1e4;                 % 播种频率：从这里向两端延拓
 v1      = 1000;                % 粗扫相速度下限 [m/s]（上限由 fr.ks_val 给）
 
-param = param_0();             % pc/pf/theta0/R/n 用 param_0 里的默认值
+param = param_0();             % pc/pf/dT/n/r 用 param_0 里的默认值
 
 [~, i0] = min(abs(freqs - f0_seed));
 order   = [i0:-1:1, i0:nFreq];   % 双向延拓

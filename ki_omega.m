@@ -2,7 +2,7 @@ function fr = ki_omega(omega, param, prev_lambda)
 % ki_omega —— 单个频点：求根 → 沿支追踪 → 全部随 ω 变化的量
 %
 %   omega        角频率 [rad/s]
-%   param        param_0(pc, pf, theta0) 的结果
+%   param        param_0(pc, pf, dT, n, r) 的结果
 %   prev_lambda  上一频点的 4 个根（首点传 []，此时按实部排序）
 %
 % 输出：
