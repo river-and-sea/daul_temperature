@@ -1,4 +1,4 @@
-function plot_modes()
+function plot_guidewave()
 % plot_modes -- 调用 main 绘制各类井孔导波（n 与 is_st 不同）随 dT 的对比
 %
 %   导波分类（其余导波只改 n，is_st 传 0）：
@@ -62,8 +62,8 @@ for iq = 1:5
     if iq == 1
         leg = [cellfun(@(s) ['斯通利 ' s], dT_lab, 'UniformOutput', false), ...
                cellfun(@(s) ['伪瑞利 ' s], dT_lab, 'UniformOutput', false)];
-        legend(leg, 'Location', 'southoutside', 'Orientation', 'horizontal', ...
-               'NumColumns', 2, 'FontSize', FS-3);
+        legend(leg, 'Location', 'northoutside', 'Orientation', 'horizontal', ...
+               'NumColumns', 3, 'FontSize', FS-3);
     end
 end
 sgtitle(info);
@@ -84,11 +84,12 @@ for ic = 1:size(cfg,1)
         RR{k} = main([], [], dT_list(k), nn, [], 0, F_LO, F_HI, NF);
     end
 
-    fig = figure('Visible', 'off', 'Position', [80 80 1200 900]);
+    fig = figure('Visible', 'off', 'Position', [80 80 1200 950]);
+    tl  = tiledlayout(2, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
     Q   = {'Vph', 'Vg', 'ap_w', 'at_w', 'atten_mode'};
     ttl = {'(a) 相速度', '(b) 群速度', '(c) 井壁声压激发', '(d) 井壁温度激发', '(e) 衰减'};
     for iq = 1:5
-        subplot(2, 3, iq); hold on; box on; grid on; grid minor;
+        nexttile; hold on; box on; grid on; grid minor;
         for k = 1:nDT
             v = abs(RR{k}.(Q{iq}));
             if all(~isfinite(v)), continue; end
@@ -99,11 +100,11 @@ for ic = 1:size(cfg,1)
         hold off;
         if iq == 1
             legend(cellfun(@(s) ['\DeltaT=' s], dT_lab, 'UniformOutput', false), ...
-                   'Location', 'southoutside', 'Orientation', 'horizontal', ...
+                   'Location', 'northoutside', 'Orientation', 'horizontal', ...
                    'NumColumns', 3, 'FontSize', FS-3);
         end
     end
-    sgtitle(sprintf('pc = %g MPa, pf = %g MPa, n = %d', RR{1}.pc/1e6, RR{1}.pf/1e6, nn));
+    title(tl, sprintf('pc = %g MPa, pf = %g MPa, n = %d', RR{1}.pc/1e6, RR{1}.pf/1e6, nn));
     saveas_print(fig, fullfile(outdir, fname));
 end
 

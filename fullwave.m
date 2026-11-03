@@ -74,7 +74,8 @@ angf    = cos(n*(param.th_rec - param.th_src));           % 角向因子 cos(nΔ
 chengzi = param.s0*(1 + (n > 0)) * (r0/4)^n / (2*factorial(n));
 
 for iw = 1:N_w
-    fr   = ki_omega(om_c(iw), param, []);          % 复频下的解
+    omega = om_c(iw);
+    fr   = ki_omega(omega, param, []);          % 复频下的解
     k_in = fr.kni_vec(:).';                        % 1x2
     aln  = fr.alphani(:);                          % 2x1
     k_in_all(iw,:) = k_in;
@@ -85,8 +86,8 @@ for iw = 1:N_w
 
         pA_r(iw,ik) = angf * sum(An_axis);                 % 井轴反射
         hA_r(iw,ik) = angf * sum(An_axis .* aln.');
-        pW_d(iw,ik) = angf * sum(src_wall);                % 井壁直达
-        pW_r(iw,ik) = angf * sum(An_wall);                 % 井壁反射
+        pW_d(iw,ik) = angf * param.den_f_in * omega^2 * sum(src_wall);                % 井壁直达
+        pW_r(iw,ik) = angf * param.den_f_in * omega^2 * sum(An_wall);                 % 井壁反射
         hW_d(iw,ik) = angf * sum(src_wall .* aln.');
         hW_r(iw,ik) = angf * sum(An_wall .* aln.');
     end
@@ -131,6 +132,9 @@ out.H_wall_r = to_tz(hW_r);   out.H_wall_d = to_tz(hW_d);
 out.time  = (0:N_t-1)*dt;             % 1×512  时间轴 [s]
 out.z     = z_all;                    % 1×2049 空间轴 [m]
 out.f_src = f_src;
+out.n     = n;
+out.pc    = param.pc;
+out.pf    = param.pf;
 end
 
 % ======================================================================

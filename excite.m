@@ -21,7 +21,7 @@ e = struct('ap_wall', [], 'at_wall', [], 'ap_axis', [], 'at_axis', [], 'ok', fal
 
 aln = fr.alphani(:).';                      % 1x2 温度/势比（与 an_wall 同向）
 
-e.ap_wall = sum(an_wall);
+e.ap_wall = sum(param.den_f_in * omega^2 * an_wall);
 e.at_wall = sum(an_wall .* aln);
 e.ap_axis = sum(an_axis);
 e.at_axis = sum(an_axis .* aln);
