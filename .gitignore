@@ -9,6 +9,7 @@ check/
 fig/
 slprj/
 codegen/
+result/
 octave-workspace
 
 # 编辑器 / 系统
