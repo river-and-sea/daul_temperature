@@ -1,16 +1,19 @@
-function out = main(pc, pf, dT, n, r, is_st, freqs_lo, freqs_hi, nFreq)
+function out = main(pc, pf, dT, r, nMode, freqs_lo, freqs_hi, nFreq)
 % main —— 频散与激发：体波 + 单个井孔导波模式（纯计算，不绘图）
 %
 %   out = main()                                   % 全用默认值
-%   out = main(pc, pf, dT, n, r, is_st)            % 指定算例参数与分支
-%   out = main(pc, pf, dT, n, r, is_st, f_lo, f_hi, nF)   % 再指定频率轴
+%   out = main(pc, pf, dT, r, nMode)               % 指定算例参数与导波模式
+%   out = main(pc, pf, dT, r, nMode, f_lo, f_hi, nF)      % 再指定频率轴
 %
 %   输入
-%     pc, pf, dT, n, r   围压[Pa] / 孔压[Pa] / 温度变化[K] / 方位阶数 / 接收半径[m]
-%     is_st   导波分支标志（nMode 恒为 1）：
-%              1 -> 斯通利型分支，相速度窗口 [0.8 v_f, v_f]
-%              0 -> 伪瑞利型分支，相速度窗口 [v_f, V_S]
-%              （v_f = 井内流体速度，V_S = 该频点 S 波速度）
+%     pc, pf, dT, r   围压[Pa] / 孔压[Pa] / 温度变化[K] / 接收半径[m]
+%     nMode   导波模式（各自确定方位阶数 n 与相速度扫描窗口）
+%              v_f = 井内流体速度，V_S = 该频点 S 波速度，dv = V_S - v_f（速度跨度）
+%              -1 -> 斯通利波：n = 0，窗口 [0.30 v_f, 0.98 v_f]
+%               0 -> 伪瑞利波：n = 0，窗口 [1.01 v_f, V_S - dv/20]
+%               1 -> 弯曲波：  n = 1，窗口 [0.70 v_f, V_S - dv/2]
+%               2 -> 螺旋波：  n = 2，窗口 [1.01 v_f, V_S - dv/20]
+%              方位阶数 n 由 nMode 唯一确定，**不再作为输入参数**
 %     freqs_lo, freqs_hi, nFreq   频率轴起点/终点 [Hz] 与点数（默认 2e3 / 2e4 / 128）
 %
 %   输出
@@ -23,27 +26,36 @@ function out = main(pc, pf, dT, n, r, is_st, freqs_lo, freqs_hi, nFreq)
 %     out.kz_mode    1×nFreq     导波波数 [1/m]
 %     out.atten_mode 1×nFreq     导波衰减 Im(k)/Re(k)
 %     out.ap_w / ap_a / at_w / at_a   1×nFreq  激发留数（壁/轴 × 声压/温度）
-%     out.is_st / out.n / out.dT / out.pc / out.pf  元数据
+%     out.nMode / out.n / out.dT / out.pc / out.pf  元数据
 %
-%   其他导波（弯曲波 n=1、螺旋波 n=2 …）：只改 n，is_st 传 0。
+%   nMode 已唯一确定 n：-1/0 -> n=0、1 -> n=1、2 -> n=2；n 已从参数表里删掉。
 
 if nargin < 1, pc = []; end
 if nargin < 2, pf = []; end
 if nargin < 3, dT = []; end
-if nargin < 4, n  = []; end
-if nargin < 5, r  = []; end
-if nargin < 6 || isempty(is_st),    is_st    = 1;   end
-if nargin < 7 || isempty(freqs_lo), freqs_lo = 2e3; end
-if nargin < 8 || isempty(freqs_hi), freqs_hi = 2e4; end
-if nargin < 9 || isempty(nFreq),    nFreq    = 128; end
+if nargin < 4, r  = []; end
+if nargin < 5 || isempty(nMode),    nMode    = -1;  end
+if nargin < 6 || isempty(freqs_lo), freqs_lo = 2e3; end
+if nargin < 7 || isempty(freqs_hi), freqs_hi = 2e4; end
+if nargin < 8 || isempty(nFreq),    nFreq    = 256; end
 
 here = fileparts(mfilename('fullpath'));
 addpath(here);
 param_sym();
 
 % ---------------- 参数 ----------------
-freqs   = logspace(log10(freqs_lo), log10(freqs_hi), nFreq);
-f0_seed = (freqs_lo + freqs_hi) / 2;
+% freq
+freqs   = linspace(freqs_lo, freqs_hi, nFreq);
+% f0_seed = (freqs_lo + freqs_hi) / 2;
+f0_seed = 15000;
+
+% ---- 导波模式 nMode 决定方位阶数 n（2026-11-17 用户定：n 由导波模式定，不再输入）----
+%   nMode = -1 斯通利(n=0) / 0 伪瑞利(n=0) / 1 弯曲(n=1) / 2 螺旋(n=2)
+nMode_exp = [0, 0, 1, 2];               % 索引 = nMode + 2
+if nMode < -1 || nMode > 2 || nMode ~= round(nMode)
+    error('main:badMode', 'nMode 只能是 -1 / 0 / 1 / 2，收到 %g', nMode);
+end
+n = nMode_exp(nMode + 2);               % 方位阶数由模式唯一确定
 
 param = param_0(pc, pf, dT, n, r);
 
@@ -86,18 +98,24 @@ for ii = 1:numel(order)
         vf   = omega / real(fr.kni_vec(1));     % 井内流体速度 [m/s]
         vS   = Vs(idx);                          % 本频点 S 波速度 [m/s]
 
-        if is_st
-            vwin = [0.8*vf, 0.99*vf];                 % 斯通利型分支
-        else
-            vwin = [1.05*vf, 0.95*vS];                % 伪瑞利型分支（上界略收，避开 V_S）
+        dv = vS - vf;                        % 速度跨度，各模式按自己的分母收缩上界
+        switch nMode
+            case -1                          % 斯通利波（n = 0）
+                vwin = [0.30*vf, 0.98*vf];
+            case 0                           % 伪瑞利波（n = 0）
+                vwin = [1.01*vf, vS - dv/20];
+            case 1                           % 弯曲波（n = 1）
+                vwin = [0.70*vf, vS - dv/2];
+            case 2                           % 螺旋波（n = 2，与弯曲波同族）
+                vwin = [0.70*vf, vS - dv/2];
         end
 
         [kz, kz_pre] = kz_solve(detf, omega, omega_pre, vwin, kz_pre);   % 只在首点粗扫一次
 
-        if isfinite(kz) && abs(omega/real(kz) - vS)/vS < 1e-3
-            active = false;
-            kz     = NaN;                        % 落到 V_S：此点也舍去，之后停止
-        end
+        % if isfinite(kz) && abs(omega/real(kz) - vS)/vS < 1e-3
+        %     active = false;
+        %     kz     = NaN;                        % 落到 V_S：此点也舍去，之后停止
+        % end
         kz_all(idx) = kz;
 
         if idx == i0 && isnan(kz_f0), kz_f0 = kz;  end
@@ -134,17 +152,17 @@ out = struct( ...
     'ap_a',       ap_a,         ...
     'at_w',       at_w,         ...
     'at_a',       at_a,         ...
-    'is_st',      is_st,        ...
-    'n',          param.n,      ...
-    'dT',         param.dT,     ...
-    'pc',         param.pc,     ...
-    'pf',         param.pf);
+    'nMode',      nMode,        ...
+    'n',          param.case.n,      ...
+    'dT',         param.case.dT,     ...
+    'pc',         param.case.pc,     ...
+    'pf',         param.case.pf);
 
 ok = isfinite(Vph);
 if any(ok)
-    fprintf('mode (n=%d, is_st=%d): %.1f ~ %.1f m/s, %d/%d pts\n', ...
-        n, is_st, min(Vph(ok)), max(Vph(ok)), sum(ok), nFreq);
+    fprintf('mode (n=%d, nMode=%d): %.1f ~ %.1f m/s, %d/%d pts\n', ...
+        param.case.n, nMode, min(Vph(ok)), max(Vph(ok)), sum(ok), nFreq);
 else
-    fprintf('mode (n=%d, is_st=%d): no valid point\n', n, is_st);
+    fprintf('mode (n=%d, nMode=%d): no valid point\n', param.case.n, nMode);
 end
 end
