@@ -23,11 +23,11 @@ if nargout < 2
     return
 end
 
-n  = param.n;
+n  = param.case.n;
 s0 = param.s0;
 
 R = param.R;                                  % 井半径 [m]（只用于衰减因子 e^{-|Re 2knr R|}）
-r = param.r;                                  % 接收器径向位置 [m]
+r = param.case.r;                                  % 接收器径向位置 [m]
 
 knr = sqrt(kz.^2 - fr.kni_vec(:).^2).';      % 1x2 井内两支径向波数
 kap = knr*R;                                  % κ = k_nr*R

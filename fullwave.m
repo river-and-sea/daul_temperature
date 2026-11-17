@@ -33,7 +33,7 @@ if nargin < 4, n  = []; end
 if nargin < 5, r  = []; end
 
 param = param_0(pc, pf, dT, n, r);
-n = param.n;
+n = param.case.n;
 
 %% ============ 0. 网格常量 ============
 tc         = 0.5e-3;                  % 源脉冲特征时间 [s]
@@ -133,8 +133,8 @@ out.time  = (0:N_t-1)*dt;             % 1×512  时间轴 [s]
 out.z     = z_all;                    % 1×2049 空间轴 [m]
 out.f_src = f_src;
 out.n     = n;
-out.pc    = param.pc;
-out.pf    = param.pf;
+out.pc    = param.case.pc;
+out.pf    = param.case.pf;
 end
 
 % ======================================================================

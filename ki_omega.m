@@ -2,7 +2,7 @@ function fr = ki_omega(omega, param, prev_lambda)
 % ki_omega —— 单个频点：求根 → 沿支追踪 → 全部随 ω 变化的量
 %
 %   omega        角频率 [rad/s]
-%   param        param_0(pc, pf, dT, n, r) 的结果
+%   param        param_0(cfg) 的结果（算例量在 param.case，材质派生量在顶层）
 %   prev_lambda  上一频点的 4 个根（首点传 []，此时按实部排序）
 %
 % 输出：
@@ -21,17 +21,18 @@ if isempty(f_poly)
     f_det  = matlabFunction(det_sym, 'Vars', vars);
 end
 
-den = param.den;  den_f = param.den_f;  T0 = param.T0;
+den = param.den;  den_f = param.den_f;
+if isfield(param, 'Tp'), Tp = param.Tp; else, Tp = param.T0; end
 
 den_tilde = 1i*param.visc/omega/param.k0 + den_f*param.morsE/param.poros;
-F_xz      = param.K/T0/(-1i*omega);
+F_xz      = param.K/Tp/(-1i*omega);
 
 % ---- 16 个本构量（各自具名）----
 H_p       = param.H_p;
 C_p       = param.C_p;
 Upsilon_p = param.Upsilon_p;
-K_s_tilde = param.k_s/T0/(1i/omega + param.time0_s);
-K_f_tilde = param.k_f/T0/(1i/omega + param.time0_f);
+K_s_tilde = param.k_s/Tp/(1i/omega + param.time0_s);
+K_f_tilde = param.k_f/Tp/(1i/omega + param.time0_f);
 Omega_11  = param.Omega_11;
 Omega_12  = param.Omega_12;
 Omega_21  = param.Omega_21;
@@ -53,7 +54,7 @@ ki_vec = omega*sqrt(S_squared);
 ks_val = omega*sqrt((den - den_f^2/den_tilde)/param.G_p);
 
 % ---- 井内 2 支：二次方程解析根 ----
-K_f_tilde_in = param.k_f_in/T0/(1i/omega + param.time0_f_in);
+K_f_tilde_in = param.k_f_in/Tp/(1i/omega + param.time0_f_in);
 b_2jie = param.den_f_in*K_f_tilde_in + param.Knf*param.F_p22_in + param.Omega_2f_in^2;
 disc   = sqrt(b_2jie^2 - 4*param.Knf*K_f_tilde_in*param.den_f_in*param.F_p22_in);
 S_squared_in = [(b_2jie - disc)/(2*param.Knf*K_f_tilde_in); ...

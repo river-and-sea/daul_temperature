@@ -6,10 +6,10 @@ function [kz, kz_pre] = kz_solve(detf, omega, omega_pre, v, kz_pre)
 
 if isempty(kz_pre) || ~isfinite(kz_pre)
     % 首点：粗扫，直接取 |det| 最小的一点作初值
-    att_lo = 1e-6;        % 衰减窗 Im/Re 下限（对数分布，须 > 0）
-    att_hi = 1e-1;        % 衰减窗 Im/Re 上限
-    Nv     = 200;         % 相速度方向点数
-    Na     = 40;          % 衰减方向点数
+    att_lo = 1e-4;        % 衰减窗 Im/Re 下限（对数分布，须 > 0）
+    att_hi = 1e-2;        % 衰减窗 Im/Re 上限
+    Nv     = 256;         % 相速度方向点数
+    Na     = 128;          % 衰减方向点数
 
     vg  = linspace(v(1), v(2), Nv);
     att = logspace(log10(att_lo), log10(att_hi), Na);

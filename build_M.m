@@ -9,7 +9,7 @@ function M = build_M(kz_val, fr, param)
 % 只输出 M（8x10）；需要方阵时调用方自己截 M(:,1:8)。
 
 R = param.R;
-n = param.n;
+n = param.case.n;
 
 % ---- 从 fr / param 解包（变量名沿用原程序）----
 ki_vec     = fr.ki_vec;
