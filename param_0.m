@@ -23,8 +23,8 @@ function param = param_0(pc, pf, dT, n, r, material)
 
 % ---------------- 算例量 ----------------
 R  = 0.1;                                         % 井半径 [m]（固定，不作输入）
-if nargin < 1 || isempty(pc), pc = 10e6; end
-if nargin < 2 || isempty(pf), pf = 10e6;  end
+if nargin < 1 || isempty(pc), pc = 0e6; end
+if nargin < 2 || isempty(pf), pf = 0e6;  end
 if nargin < 3 || isempty(dT), dT = 10;    end
 if nargin < 4 || isempty(n),  n  = 0;    end
 if nargin < 5 || isempty(r),  r  = R;    end
@@ -35,15 +35,16 @@ mat = mat_preset(material);
 e   = mat.elastic;
 th  = mat.thermal;
 
-% ---------------- 流体黏度随温度修正（Vogel 型比例缩放）----------------
-% μ(T) = μ0 · 10^[247.8/(T-140) - 247.8/(T0-140)]，T 为绝对温度 [K]
-% μ0 = 材质预设的 mat.elastic.visc0（参考温度 T0 下的值）
-% 水在 273–373 K 内误差 < 2%；dT = 0 时比例恒为 1，输出 visc == visc0
+% ---------------- 流体黏度 ----------------
+% ★ 2026-11-22 用户要求：黏度**固定**，不随温度变化（visc = visc0）
+%   原先的 Vogel 型温度修正 μ(T)=μ0·10^[247.8/(T-140) - 247.8/(T0-140)] 已停用，
+%   需要恢复时把下面两行注释打开、并删掉 visc = e.visc0 那一行即可。
 Tp = th.T0 + dT;
-if Tp <= 160
-    error('param_0:dT', '温度 %.1f K 过低（Vogel 公式要求 T > 140 K）', Tp);
-end
-visc = e.visc0 * 10^(247.8/(Tp - 140) - 247.8/(th.T0 - 140));
+% if Tp <= 160
+%     error('param_0:dT', '温度 %.1f K 过低（Vogel 公式要求 T > 140 K）', Tp);
+% end
+% visc = e.visc0 * 10^(247.8/(Tp - 140) - 247.8/(th.T0 - 140));
+visc = e.visc0;
 
 % ---------------- 源径与方位角（几何）----------------
 r0 = 0.01;                    % 源分布半径 [m]
@@ -229,7 +230,28 @@ switch lower(name)
             'C_E_s',   900,    'C_E_f',  4180, ...
             'K',       1e-7,   'alpha_s', 2.4e-6, 'alpha_f', 7e-4);
 
+    case 'zong_sand' % Zong et al. (2023) Surv. Geophys. 44:425-462, Table 2
+                     %   「Cylindrical sandstone」那列（水饱和，据 Qu et al. 2018）
+                     %   弹性参数全部按原表；热学 Table 2 未给 -> 沿用 'zhao'
+                     %   原表：phi=0.004, k0=0.01 md, at=3.7, KM=28.18, Kb=56.46,
+                     %         rho_s=2760, mu_b=31.29, Kf=2.25 GPa, rho_f=1000, eta=1e-3
+                     %   TOE: nu1'=-39196, nu2'=-9040, nu3'=-1507, gama=-18000,
+                     %        gama1=1.93, gama2=21000, gama3=44000  (均 GPa)
+        mat.elastic = struct( ...
+            'k0',    1e-17,    'morsE', 3.7,    'visc0', 1e-3, ...
+            'den_s', 2760,     'poros', 0.004,  'den_f', 1000, ...
+            'Kf',    2.25e9,   'Ks',    56.46e9, ...
+            'mu_b',  31.29e9,  'Kb',    28.18e9, ...
+            'nu1', -39196e9,   'nu2',  -9040e9, 'nu3', -1507e9, ...
+            'gama', -18000e9,  'gama1',   1.93e9, ...
+            'gama2', 21000e9,  'gama3', 44000e9);
+        mat.thermal = struct( ...
+            'T0',      300,    'k0_s',   7.69,   'k0_f',   0.598, ...
+            'time0_s', 1e-11,  'time0_f', 1e-9, ...
+            'C_E_s',   740,    'C_E_f',  4157, ...
+            'K',       1e-7,   'alpha_s', 3.45e-5, 'alpha_f', 2.07e-4);
+
     otherwise
-        error('param_0:material', '未知材质预设: %s（可选 zhao / chen / hou）', name);
+        error('param_0:material', '未知材质预设: %s（可选 zhao / chen / hou / zong_sand）', name);
 end
 end
